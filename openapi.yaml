@@ -1,0 +1,350 @@
+openapi: 3.1.0
+
+info:
+  title: Library API
+  version: 1.0.0
+  description: API сервиса библиотека
+servers:
+  - url: https://library.example.com/v1
+    description: Production server
+paths:
+components:
+  parameters:
+    IdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор ресурса
+      schema:
+        type: integer
+        minimum: 1
+
+    PageParam:
+      name: page
+      in: query
+      description: Номер страницы (начиная с 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      name: page_size
+      in: query
+      description: Количество элементов на странице
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    SortByParam:
+      name: sort_by
+      in: query
+      description: Поле для сортировки
+      schema:
+        type: string
+
+    SortOrderParam:
+      name: sort_order
+      in: query
+      description: Направление сортировки
+      schema:
+        type: string
+        enum:
+          - asc
+          - desc
+        default: asc
+
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Уникальный ключ идемпотентности (UUID).
+        Сервер хранит ключ 24 часа. Повторный запрос с тем же ключом и телом вернёт
+        полный replay предыдущего ответа; с другим телом - 409 IDEMPOTENCY_MISMATCH.
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+  schemas:
+    Book:
+      type: object
+      required: 
+        - id
+        - title
+        - author
+        - isbn
+        - published_year
+        - total_copies
+        - available_copies
+      properties: 
+        id:
+          type: integer
+          description: Уникальный идентификатор книги
+          example: 1
+        title:
+          type: string
+          description: Название книги
+          example: "Война и мир"
+        author:
+          type: string
+          description: Имя автора
+          example: "Лев Толстой"
+        isbn:
+          type: string
+          description: ISBN книги
+          example: "978-5-386-01614-2"
+        published_year:
+          type: integer
+          description: Год выпуска книги
+          example: 1969
+        total_copies:
+          type: integer
+          description: Общее количество экземпляров данной книги
+          example: 5
+        available_copies:
+          type: integer
+          description: Текущее количество книг в библиотеке
+          minimum: 0
+          readOnly: true
+          example: 5
+    CreateBookRequest:
+      type: object
+      required:
+        - title
+        - author
+        - isbn
+        - total_copies
+      properties:
+        title:
+          type: string
+          minLength: 1
+          example: "Война и мир"
+        author:
+          type: string
+          example: "Лев Толстой"
+        isbn:
+          type: string
+          example: "978-5-386-01614-2"
+        published_year:
+          type: integer
+          example: 1869
+        total_copies:
+          type: integer
+          minimum: 1
+          example: 10
+    UpdateBookRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+        author:
+          type: string
+        isbn:
+          type: string
+        published_year:
+          type: integer
+        total_copies:
+          type: integer
+          minimum: 0
+    Reader:
+      type: object
+      required:
+        - id
+        - full_name
+        - email
+        - registered_at
+      properties:
+        id:
+          type: integer
+          example: 5
+        full_name:
+          type: string
+          minLength: 1
+          example: "Иван Иванов"
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+        registered_at:
+          type: string
+          format: date-time
+          description: Дата регистрации (заполняется сервером)
+          readOnly: true
+          example: "2026-01-15T10:00:00Z"
+    CreateReaderRequest:
+      type: object
+      required:
+        - full_name
+        - email
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+          example: "Иван Иванов"
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+    UpdateReaderRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        full_name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+    Loan:
+      type: object
+      required:
+        - id
+        - book_id
+        - reader_id
+        - loaned_at
+        - due_date
+        - returned_at
+      properties:
+        id:
+          type: integer
+          example: 12
+        book_id:
+          type: integer
+          example: 1
+        reader_id:
+          type: integer
+          example: 5
+        loaned_at:
+          type: string
+          format: date-time
+          description: Дата выдачи (заполняется сервером)
+          readOnly: true
+          example: "2026-10-01T12:00:00Z"
+        due_date:
+          type: string
+          format: date-time
+          description: |
+            Дата, до которой нужно вернуть книгу.
+            Должна быть позже текущей даты на момент создания.
+          example: "2026-10-15T23:59:59Z"
+        returned_at:
+          type: string
+          format: date-time
+          nullable: true
+          description:
+            Дата возврата. `null`, если книга ещё не возвращена.
+            Заполняется сервером при вызове `POST /loans/{id}/return`.
+          example: "2026-10-05T14:30:00Z"
+    CreateLoanRequest:
+      type: object
+      required:
+        - book_id
+        - reader_id
+        - due_date
+      properties:
+        book_id:
+          type: integer
+          minimum: 1
+          example: 1
+        reader_id:
+          type: integer
+          minimum: 1
+          example: 5
+        due_date:
+          type: string
+          format: date-time
+          description: Должна быть позже текущей даты
+          example: "2026-10-15T23:59:59Z"
+    Pagination:
+      type: object
+      required:
+        - page
+        - page_size
+        - total_items
+        - total_pages
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total_items:
+          type: integer
+          example: 40
+        total_pages:
+          type: integer
+          example: 3
+
+    PaginationLinks:
+      type: object
+      required:
+        - self
+        - next
+        - prev
+      properties:
+        self:
+          type: string
+          example: "/v1/books?page=1&page_size=20"
+        next:
+          type:
+            - string
+            - "null"
+          example: "/v1/books?page=2&page_size=20"
+        prev:
+          type:
+            - string
+            - "null"
+          example: null
+    BookList:
+      type: object
+      required:
+        - data
+        - pagination
+        - links
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Book'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        links:
+          $ref: '#/components/schemas/PaginationLinks'
+
+    ReaderList:
+      type: object
+      required:
+        - data
+        - pagination
+        - links
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reader'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        links:
+          $ref: '#/components/schemas/PaginationLinks'
+
+    LoanList:
+      type: object
+      required:
+        - data
+        - pagination
+        - links
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Loan'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        links:
+          $ref: '#/components/schemas/PaginationLinks'
