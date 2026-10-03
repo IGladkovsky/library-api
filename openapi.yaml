@@ -7,7 +7,616 @@ info:
 servers:
   - url: https://library.example.com/v1
     description: Production server
+tags:
+  - name: Books
+    description: Операции с книгами
+  - name: Readers
+    description: Операции с читателями
+  - name: Loans
+    description: Операции с выдачами
 paths:
+  /books:
+    get:
+      tags:
+        - Books
+      summary: Получить список книг
+      operationId: listBooks
+      description: Возвращает список книг
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/SortByParam'
+        - $ref: '#/components/parameters/SortOrderParam'
+        - name: author
+          in: query
+          description: Фильтр по автору
+          schema:
+            type: string
+        - name: title
+          in: query
+          description: Фильтр по названию (поиск по подстроке)
+          schema:
+            type: string
+        - name: isbn
+          in: query
+          description: Фильтр по ISBN
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успешный возврат списка книг
+          content:
+            application/json:
+              schema:
+                $ref: '#components/schemas/BookList'
+              examples:
+                book-list-example:
+                  summary: Пример списка книг
+                  value:
+                    data:
+                      - id: 1
+                        title: "Война и мир"
+                        author: "Лев Толстой"
+                        isbn: "978-5-17-090789-0"
+                        published_year: 1869
+                        total_copies: 5
+                        available_copies: 3
+                      - id: 2
+                        title: "Преступление и наказание"
+                        author: "Фёдор Достоевский"
+                        isbn: "978-5-17-120419-8"
+                        published_year: 1866
+                        total_copies: 3
+                        available_copies: 0
+                    pagination:
+                      page: 1
+                      limit: 20
+                      total_items: 2
+                      total_pages: 1
+                    links:
+                      self: "/v1/books?page=1&limit=20"
+                      next: null
+                      prev: null
+        '400':
+          description: Некорректный запрос
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: 
+        - Books
+      summary: Создать новую книгу
+      operationId: createBook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookRequest'
+            examples:
+              create-book-example:
+                summary: Создание книги
+                value:
+                  title: "Анна Каренина"
+                  author: "Лев Толстой"
+                  isbn: "978-5-17-090789-0"
+                  published_year: 1877
+                  total_copies: 10
+      responses:
+        '201':
+          description: Книга успешно создана
+          headers:
+            Location:
+              description: URL созданного ресурса
+              schema:
+                type: string
+              example: "/v1/books/3"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              examples:
+                created-book-example:
+                  summary: Созданная книга
+                  value:
+                    id: 3
+                    title: "Анна Каренина"
+                    author: "Лев Толстой"
+                    isbn: "978-5-17-090789-0"
+                    published_year: 1877
+                    total_copies: 10
+                    available_copies: 10
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /books/{id}:
+    get:
+      tags:
+        - Books
+      summary: Получить книгу по id
+      operationId: getBook
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Книга найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              examples:
+                book-example-1:
+                  summary: Пример книги
+                  value:
+                    id: 1
+                    title: "Война и мир"
+                    author: "Лев Толстой"
+                    isbn: "978-5-17-090123-4"
+                    published_year: 1869
+                    total_copies: 5
+                    available_copies: 3
+        '404':
+          description: Книга не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not-found-example:
+                  summary: Книга не найдена
+                  value:
+                    error:
+                      code: "NOT_FOUND"
+                      message: "Книга с указанным id не найдена"
+                      details: []
+                      request_id: "req-abc-123"
+    patch:
+      tags:
+        - Books
+      summary: Обновить книгу (частично)
+      operationId: updateBook
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookRequest'
+      responses:
+        '200':
+          description: Книга обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Книга не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      tags:
+        - Books
+      summary: Удалить книгу
+      operationId: deleteBook
+      description: |
+        Удаление возможно только если у книги нет активных выдач.
+        В противном случае возвращается `409 CONFLICT`.
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '204':
+          description: Книга удалена
+        '404':
+          description: Книга не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Нельзя удалить - есть активные выдачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                conflict-delete-book:
+                  summary: Конфликт при удалении
+                  value:
+                    error:
+                      code: "CONFLICT"
+                      message: "Нельзя удалить книгу: существуют активные выдачи"
+                      details:
+                        - field: "id"
+                          issue: "active_loans_exist"
+                          message: "У книги 2 активных выдачи"
+                      request_id: "req-xyz-789"  
+  /readers:
+    get:
+      tags:
+        - Readers
+      summary: Получить список читателей
+      operationId: listReaders
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/SortByParam'
+        - $ref: '#/components/parameters/SortOrderParam'
+        - name: email
+          in: query
+          description: Фильтр по email (точное совпадение)
+          schema:
+            type: string
+            format: email
+        - name: full_name
+          in: query
+          description: Фильтр по имени (поиск по подстроке)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Успешный ответ со списком читателей
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderList'
+    post:
+      tags:
+        - Readers
+      summary: Зарегистрировать нового читателя
+      operationId: createReader
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReaderRequest'
+      responses:
+        '201':
+          description: Читатель создан
+          headers:
+            Location:
+              description: URL созданного ресурса
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reader'
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /readers/{id}:
+    get:
+      tags:
+        - Readers
+      summary: Получить читателя по id
+      operationId: getReader
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Читатель найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reader'
+        '404':
+          description: Читатель не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+        - Readers
+      summary: Частично обновить читателя
+      operationId: updateReader
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReaderRequest'
+      responses:
+        '200':
+          description: Читатель обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reader'
+        '404':
+          description: Читатель не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Readers
+      summary: Удалить читателя
+      operationId: deleteReader
+      description: |
+        Удаление возможно только если у читателя нет активных выдач.
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '204':
+          description: Читатель удалён
+        '404':
+          description: Читатель не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Нельзя удалить - есть активные выдачи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /loans:
+    get:
+      tags:
+        - Loans
+      summary: Получить список выдач
+      operationId: listLoans
+      description: |
+        Поддерживает фильтр `status=overdue` для получения просроченных выдач.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/SortByParam'
+        - $ref: '#/components/parameters/SortOrderParam'
+        - name: status
+          in: query
+          description: |
+            Фильтр по статусу:
+            - `active` - активная выдача
+            - `overdue` - просроченная (due_date < сегодня и returned_at == null)
+            - `returned` - возвращённая
+          schema:
+            type: string
+            enum:
+              - active
+              - overdue
+              - returned
+        - name: book_id
+          in: query
+          description: Фильтр по книге
+          schema:
+            type: integer
+        - name: reader_id
+          in: query
+          description: Фильтр по читателю
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Успешный ответ со списком выдач
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanList'
+              examples:
+                loans-list-example:
+                  summary: Пример списка выдач (включая просроченные)
+                  value:
+                    data:
+                      - id: 10
+                        book_id: 1
+                        reader_id: 5
+                        loaned_at: "2026-09-01T10:00:00Z"
+                        due_date: "2026-09-15T23:59:59Z"
+                        returned_at: null
+                      - id: 11
+                        book_id: 2
+                        reader_id: 5
+                        loaned_at: "2026-08-10T12:00:00Z"
+                        due_date: "2026-08-24T23:59:59Z"
+                        returned_at: "2026-08-20T18:30:00Z"
+                    pagination:
+                      page: 1
+                      limit: 20
+                      total_items: 2
+                      total_pages: 1
+                    links:
+                      self: "/v1/loans?page=1&limit=20"
+                      next: null
+                      prev: null
+    post:
+      tags:
+        - Loans
+      summary: Оформить выдачу книги
+      operationId: createLoan
+      description: |
+        Оформляет выдачу книги читателю.
+
+        **Идемпотентность:**
+        Заголовок `Idempotency-Key` обязателен.
+        - При повторном запросе с тем же ключом и тем же телом - возвращается полный replay предыдущего ответа (201).
+        - При повторном запросе с тем же ключом, но другим телом - возвращается `409 IDEMPOTENCY_MISMATCH`.
+        - При конкурентных повторах (одновременные запросы с одинаковым ключом) - гарантируется ровно одно успешное создание.
+        - Ключ хранится 24 часа, после чего считается новым.
+
+        **Бизнес-правила:**
+        - `available_copies` книги должна быть > 0.
+        - У читателя не должно быть более 5 активных выдач.
+        - `due_date` должна быть позже текущей даты.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLoanRequest'
+            examples:
+              create-loan-example:
+                summary: Пример оформления выдачи
+                value:
+                  book_id: 1
+                  reader_id: 5
+                  due_date: "2026-10-15T23:59:59Z"
+      responses:
+        '201':
+          description: Выдача оформлена
+          headers:
+            Location:
+              description: URL созданного ресурса
+              schema:
+                type: string
+              example: "/v1/loans/12"
+            Idempotency-Key:
+              description: Повторяет ключ из запроса
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+              examples:
+                created-loan-example:
+                  summary: Созданная выдача
+                  value:
+                    id: 12
+                    book_id: 1
+                    reader_id: 5
+                    loaned_at: "2026-10-01T12:00:00Z"
+                    due_date: "2026-10-15T23:59:59Z"
+                    returned_at: null
+        '409':
+          description: |
+            Конфликт: либо `IDEMPOTENCY_MISMATCH` (тот же ключ, другое тело),
+            либо `CONFLICT` (нарушено бизнес-правило: нет копий / лимит выдач).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                idempotency-mismatch-example:
+                  summary: Idempotency-Key уже использован с другим телом
+                  value:
+                    error:
+                      code: "IDEMPOTENCY_MISMATCH"
+                      message: "Idempotency-Key уже использован с другим телом запроса"
+                      details: []
+                      request_id: "req-idem-001"
+                business-rule-example:
+                  summary: Превышен лимит активных выдач
+                  value:
+                    error:
+                      code: "BUSINESS_RULE_VIOLATION"
+                      message: "Превышен лимит активных выдач для читателя"
+                      details:
+                        - field: "reader_id"
+                          issue: "max_active_loans_exceeded"
+                          message: "У читателя уже 5 активных выдач"
+                      request_id: "req-br-002"
+        '422':
+          description: Ошибка валидации (due_date в прошлом)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation-due-date-example:
+                  summary: due_date в прошлом
+                  value:
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Некорректные данные запроса"
+                      details:
+                        - field: "due_date"
+                          issue: "must_be_future"
+                          message: "due_date должна быть позже текущей даты"
+                      request_id: "req-val-003"
+  /loans/{id}:
+    get:
+      tags:
+        - Loans
+      summary: Получить выдачу по id
+      operationId: getLoan
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Выдача найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+        '404':
+          description: Выдача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'        
+  /loans/{id}/return:
+    post:
+      tags:
+        - Loans
+      summary: Вернуть книгу
+      operationId: returnLoan
+      description: |
+        Фиксирует возврат книги. Используется `POST`, а не `DELETE`,
+        потому что возврат - это изменение состояния ресурса (заполнение `returned_at`),
+        а не удаление записи.
+      parameters:
+        - $ref: '#/components/parameters/IdPathParam'
+      responses:
+        '200':
+          description: Книга возвращена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Loan'
+              examples:
+                returned-loan-example:
+                  summary: Возвращённая выдача
+                  value:
+                    id: 12
+                    book_id: 1
+                    reader_id: 5
+                    loaned_at: "2026-10-01T12:00:00Z"
+                    due_date: "2026-10-15T23:59:59Z"
+                    returned_at: "2026-10-05T14:30:00Z"
+        '404':
+          description: Выдача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Выдача уже возвращена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     IdPathParam:
@@ -28,8 +637,8 @@ components:
         minimum: 1
         default: 1
 
-    PageSizeParam:
-      name: page_size
+    LimitParam:
+      name: limit
       in: query
       description: Количество элементов на странице
       schema:
@@ -264,14 +873,14 @@ components:
       type: object
       required:
         - page
-        - page_size
+        - limit
         - total_items
         - total_pages
       properties:
         page:
           type: integer
           example: 1
-        page_size:
+        limit:
           type: integer
           example: 20
         total_items:
@@ -290,12 +899,12 @@ components:
       properties:
         self:
           type: string
-          example: "/v1/books?page=1&page_size=20"
+          example: "/v1/books?page=1&limit=20"
         next:
           type:
             - string
             - "null"
-          example: "/v1/books?page=2&page_size=20"
+          example: "/v1/books?page=2&limit=20"
         prev:
           type:
             - string
@@ -348,3 +957,67 @@ components:
           $ref: '#/components/schemas/Pagination'
         links:
           $ref: '#/components/schemas/PaginationLinks'
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+        - details
+        - request_id
+      properties:
+        code:
+          type: string
+          description: Машинный код ошибки
+          enum:
+            - INVALID_REQUEST
+            - NOT_FOUND
+            - VALIDATION_ERROR
+            - CONFLICT
+            - BUSINESS_RULE_VIOLATION
+            - IDEMPOTENCY_MISMATCH
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки
+          example: "Некорректные данные запроса"
+        details:
+          type: array
+          description: Детализация ошибок по полям
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            field: "title"
+            issue: "minLength"
+            message: "Длина title должна быть не менее 1 символа"
+        request_id:
+          type: string
+          description: Идентификатор запроса
+          example: "req-abc-123"
+
+    ErrorDetail:
+      type: object
+      required:
+        - field
+        - issue
+        - message
+      properties:
+        field:
+          type: string
+          description: Имя поля, в котором произошла ошибка
+          example: "title"
+        issue:
+          type: string
+          description: Код проблемы (minLength, required, format, max_active_loans_exceeded и т.д.)
+          example: "minLength"
+        message:
+          type: string
+          description: Описание проблемы для конкретного поля
+          example: "Длина title должна быть не менее 1 символа"
